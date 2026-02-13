@@ -21,7 +21,7 @@ If a tool doesn't:
 
 ## Current Status
 
-**Version 0.0 — Proof of Concept (Frontend Only)**
+**Version 0.2 — Research Paper Summarization Engine**
 
 - [x] Three.js scene with lighting, camera, orbit controls
 - [x] Multi-part 3D object (stacked box layers)
@@ -29,10 +29,14 @@ If a tool doesn't:
 - [x] Keyboard-triggered explode/collapse animation (`E` key)
 - [x] Post-processing pipeline (OutlinePass)
 - [x] Responsive resize handling
-- [ ] PDF ingestion backend
-- [ ] LLM-powered entity/relationship extraction
-- [ ] Knowledge graph construction
-- [ ] 2D graph visualization
+- [x] PDF ingestion backend (FastAPI + pdfplumber)
+- [x] Section detection from research papers
+- [x] Intelligent chunking for large PDFs (400+ pages)
+- [x] Hierarchical summarization via Google Gemini 2.5 Flash (free)
+- [x] Structured extraction: title, problem, methodology, contributions, limitations, future work
+- [x] Per-section summaries with key points and key terms
+- [ ] Frontend UI for upload + results display
+- [ ] 2D concept graph visualization
 - [ ] 3D spatial graph rendering
 - [ ] Hand tracking / gesture control
 
@@ -43,7 +47,7 @@ If a tool doesn't:
 ```
 INPUT LAYER                    INTELLIGENCE LAYER              SPATIAL ENGINE
 ─────────────                  ────────────────────            ──────────────
-PDF / CSV / TXT                GPT (structured JSON only)      Deterministic math
+PDF / CSV / TXT                Gemini (structured JSON only)   Deterministic math
 Camera → OpenCV → OCR (v0.2)   Entity extraction               Clustering rules
                                 Relationship detection          Distance logic
         ↓                              ↓                       Importance weighting
@@ -72,7 +76,7 @@ The system IS:      knowledge → space
 | **Frontend** | Three.js, Vite, Vanilla JS | 3D rendering, interaction, post-processing |
 | **Backend** | FastAPI, Python | REST API, file ingestion, LLM orchestration |
 | **PDF Parsing** | pdfplumber | Clean text extraction from PDFs |
-| **LLM** | OpenAI GPT (general) | Structured entity/relationship extraction (JSON only) |
+| **LLM** | Google Gemini 2.5 Flash (free) | Structured summarization + entity extraction (JSON only) |
 | **Graph** | In-memory Python graph (Neo4j later) | Knowledge graph: nodes, edges, metadata |
 | **Spatial Logic** | Pure math, graph algorithms | Layout, clustering, distance, importance |
 | **Hand Tracking** | MediaPipe + OpenCV (v0.3+) | Gesture recognition for grab, rotate, explode |
@@ -83,25 +87,22 @@ The system IS:      knowledge → space
 ## Project Structure (Target)
 
 ```
-Iron_Man/
+stark-viewer/
 │
 ├── backend/
-│   ├── main.py              # FastAPI server
-│   ├── ingest.py            # PDF/CSV/TXT parsing
-│   ├── chunker.py           # Logical text chunking (not token-based)
-│   ├── gpt_parser.py        # LLM → structured JSON extraction
-│   ├── graph_builder.py     # Node/edge graph construction
-│   └── requirements.txt
+│   ├── main.py              # FastAPI server — /upload and /analyze endpoints
+│   ├── pdf_extractor.py     # PDF text extraction + section detection
+│   ├── summarizer.py        # Hierarchical summarization via Gemini
+│   ├── requirements.txt
+│   ├── .env.example          # API key template
+│   └── README.md             # Backend-specific setup guide
 │
-├── stark-viewer/            # Frontend (current)
-│   ├── src/
-│   │   ├── main.js          # Three.js scene, rendering, interaction
-│   │   ├── style.css
-│   │   └── ...
-│   ├── index.html
-│   ├── package.json
-│   └── vite.config.js
+├── src/
+│   ├── main.js              # Three.js scene, rendering, interaction
+│   └── style.css
 │
+├── index.html
+├── package.json
 └── README.md
 ```
 
@@ -109,13 +110,13 @@ Iron_Man/
 
 ## Roadmap
 
-### Phase 1 — Core Pipeline (v0.1)
-- [ ] Backend: `POST /upload` → accept PDF, return raw extracted text
-- [ ] Chunker: split text by headings/paragraphs (not token count)
-- [ ] GPT Parser: extract entities + relationships → structured JSON
-- [ ] Graph Builder: merge chunks into unified node/edge graph
-- [ ] Backend: `GET /graph` → return full graph JSON
-- [ ] Frontend: fetch graph, render as 2D force-directed layout (D3.js or similar)
+### Phase 1 — Core Pipeline (v0.1) ✅
+- [x] Backend: `POST /upload` → accept PDF, return extracted text + detected sections
+- [x] Chunker: split text by section headings/paragraphs (not token count)
+- [x] Gemini Parser: extract structured summary → JSON
+- [x] Backend: `POST /analyze` → return full structured analysis
+- [ ] Frontend: upload UI + structured results display
+- [ ] Frontend: fetch analysis, render as 2D concept map
 - [ ] Basic interaction: click node → show metadata, drag, zoom
 
 ### Phase 2 — 3D Spatial Engine (v0.2)
@@ -144,16 +145,28 @@ Iron_Man/
 
 ## LLM Output Contract
 
-GPT must always return this shape. No prose. No freeform.
+Gemini must always return structured JSON. No prose. No freeform.
 
+**Section summary format:**
 ```json
 {
-  "nodes": [
-    { "id": "Revenue", "type": "metric", "summary": "Total annual revenue" }
-  ],
-  "edges": [
-    { "from": "Revenue", "to": "Profit", "relation": "influences" }
-  ]
+  "summary": "...",
+  "key_points": ["..."],
+  "key_terms": ["..."]
+}
+```
+
+**Global analysis format:**
+```json
+{
+  "inferred_title": "...",
+  "global_summary": "...",
+  "problem_statement": "...",
+  "methodology": "...",
+  "key_contributions": ["..."],
+  "limitations": ["..."],
+  "future_work": ["..."],
+  "all_key_terms": ["..."]
 }
 ```
 
@@ -193,23 +206,33 @@ object.scale.set(s, s, s)
 
 ## Getting Started
 
-### Frontend (stark-viewer)
+### Frontend
 
 ```bash
-cd stark-viewer
 npm install
 npm run dev
 ```
 
 Open `http://localhost:5173`. Click objects to select. Press `E` to explode/collapse.
 
-### Backend (coming soon)
+### Backend
 
 ```bash
 cd backend
+python -m venv venv
+venv\Scripts\activate        # Windows
 pip install -r requirements.txt
+```
+
+Get a free Gemini API key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey), then:
+
+```bash
+copy .env.example .env
+# Add your GEMINI_API_KEY to .env
 uvicorn main:app --reload
 ```
+
+API docs at `http://127.0.0.1:8000/docs`.
 
 ---
 
