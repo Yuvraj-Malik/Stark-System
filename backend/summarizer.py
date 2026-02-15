@@ -5,6 +5,7 @@ Chunks text intelligently, summarizes each chunk, then synthesizes a global summ
 
 import os
 import json
+import time
 from google import genai
 from dotenv import load_dotenv
 
@@ -83,17 +84,33 @@ def chunk_by_sections(sections: list[dict], max_chars: int = MAX_CHUNK_CHARS) ->
 
 
 def _call_gemini(prompt: str) -> dict:
-    """Call Gemini and parse JSON response."""
+    """Call Gemini and parse JSON response with retry logic for quota limits."""
     client = get_client()
-    response = client.models.generate_content(
-        model=MODEL,
-        contents=prompt,
-        config={
-            "temperature": 0.3,
-            "response_mime_type": "application/json",
-        },
-    )
-    return json.loads(response.text)
+    max_retries = 3
+    base_delay = 40  # Start with 40 seconds (free tier limit is 5 requests/minute)
+    
+    for attempt in range(max_retries):
+        try:
+            response = client.models.generate_content(
+                model=MODEL,
+                contents=prompt,
+                config={
+                    "temperature": 0.3,
+                    "response_mime_type": "application/json",
+                },
+            )
+            return json.loads(response.text)
+        except Exception as e:
+            if "RESOURCE_EXHAUSTED" in str(e) or "quota" in str(e).lower():
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)  # Exponential backoff
+                    print(f"Rate limited. Retrying in {delay} seconds... (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(delay)
+                    continue
+                else:
+                    raise Exception(f"Rate limit exceeded after {max_retries} attempts. Please wait a few minutes before trying again.")
+            else:
+                raise  # Re-raise non-quota errors immediately
 
 
 def summarize_chunk(chunk: dict) -> dict:
