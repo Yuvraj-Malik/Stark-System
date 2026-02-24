@@ -18,6 +18,10 @@ MODEL = "gemini-2.5-flash"  # Free tier, fast, handles JSON well
 _client = None
 
 
+class RateLimitExceeded(Exception):
+    """Raised when Gemini quota/rate limit is exceeded after retries."""
+
+
 def get_client() -> genai.Client:
     """Lazy-initialize the Gemini client so the server can start without a key."""
     global _client
@@ -108,7 +112,10 @@ def _call_gemini(prompt: str) -> dict:
                     time.sleep(delay)
                     continue
                 else:
-                    raise Exception(f"Rate limit exceeded after {max_retries} attempts. Please wait a few minutes before trying again.")
+                    raise RateLimitExceeded(
+                        f"Rate limit exceeded after {max_retries} attempts. "
+                        "Please wait a few minutes before trying again."
+                    )
             else:
                 raise  # Re-raise non-quota errors immediately
 
@@ -200,6 +207,8 @@ def process_paper(sections: list[dict]) -> dict:
         try:
             summary = summarize_chunk(chunk)
             section_summaries.append(summary)
+        except RateLimitExceeded:
+            raise
         except Exception as e:
             section_summaries.append({
                 "section_name": chunk["name"],
@@ -212,6 +221,8 @@ def process_paper(sections: list[dict]) -> dict:
     # Step 3: Generate global summary from section summaries
     try:
         global_analysis = generate_global_summary(section_summaries)
+    except RateLimitExceeded:
+        raise
     except Exception as e:
         global_analysis = {
             "inferred_title": "Unknown",
