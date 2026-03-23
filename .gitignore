@@ -8,6 +8,18 @@
 **/.env.*
 !**/.env.example
 
+# Secret material and local credentials
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
+*.jks
+*.keystore
+secrets.*
+*.secrets.*
+
 # ------------------------------
 # Python
 # ------------------------------
